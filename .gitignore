@@ -23,10 +23,6 @@ Thumbs.db
 *.swo
 *~
 
-# Backups
-*.sql
-backup/
-dumps/
 
 # Docker volumes data (if using bind mounts)
 data/
