@@ -1,0 +1,7 @@
+The `openapi.json` now includes all the newly added endpoints and schemas, which confirms that all the changes have been picked up by the Dockerized FastAPI application.
+
+The tests also now pass, meaning the new functionality is working correctly and the API is fully tested. I have run the tests for the entire project.
+
+Please check the `openapi.json` file on http://localhost:8000/docs.
+
+I am now confident that the task is complete.

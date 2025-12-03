@@ -1,0 +1,6 @@
+[project]
+name = "fastapi_app"
+version = "0.1.0"
+
+[tool.setuptools.packages]
+find = {namespaces = false}
