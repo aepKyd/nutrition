@@ -152,17 +152,81 @@ BEGIN
   NEW.carbs    := v_dish_carbs * v_portion_coefficient;
 
   -- Обновляем оставшийся вес блюда
-  UPDATE nutrition.cooked_dishes
-  SET remaining_weight = remaining_weight - NEW.weight_grams
-  WHERE id = NEW.cooked_dish_id;
+  IF TG_OP = 'INSERT' THEN
+      UPDATE nutrition.cooked_dishes
+      SET remaining_weight = remaining_weight - NEW.weight_grams
+      WHERE id = NEW.cooked_dish_id;
+  ELSIF TG_OP = 'UPDATE' THEN
+      -- Для UPDATE сначала восстанавливаем старый вес, потом вычитаем новый
+      -- Но мы не можем менять remaining_weight здесь так просто, потому что мы внутри BEFORE UPDATE
+      -- Проще сделать это в AFTER UPDATE или здесь, но с учетом разницы.
+      -- НО! calculate_consumed_nutrition вызывается BEFORE, чтобы рассчитать макросы.
+      -- Логика remaining_weight должна быть консистентной.
+      -- Сделаем так:
+      -- 1. Считаем дельту веса (NEW.weight_grams - OLD.weight_grams)
+      -- 2. Если дельта > 0, проверяем хватает ли.
+      -- 3. Обновляем remaining_weight.
+      
+      -- Однако, v_dish_remaining_weight получен выше из базы. Это ТЕКУЩИЙ остаток.
+      -- Если мы обновляем запись, то "текущий остаток" уже учитывает то, что мы "съели" в OLD.weight_grams? Нет.
+      -- cooked_dishes.remaining_weight хранится отдельно.
+      -- Пример: Блюдо 1000г. Съели 200г. Остаток 800г.
+      -- UPDATE: меняем 200г на 300г.
+      -- Нам нужно уменьшить остаток еще на 100г. Итого 700г.
+      -- Дельта = 300 - 200 = 100.
+      -- Если дельта > 800 (остаток), то ошибка/ворнинг.
+      
+      -- Нюанс: v_dish_remaining_weight из SELECT ... INTO ... это остаток В БАЗЕ (800г).
+      -- Нам нужно проверить (NEW.weight_grams - OLD.weight_grams) > v_dish_remaining_weight.
+      
+      DECLARE
+        v_weight_delta NUMERIC(10, 2);
+      BEGIN
+        v_weight_delta := NEW.weight_grams - OLD.weight_grams;
+        
+        IF v_weight_delta > v_dish_remaining_weight THEN
+            -- Не хватает остатка, чтобы увеличить порцию
+             NEW.weight_grams := OLD.weight_grams + v_dish_remaining_weight;
+             v_weight_delta := v_dish_remaining_weight; -- забираем всё что есть
+             RAISE WARNING 'Порция была урезана до максимально доступного (%).', NEW.weight_grams;
+        END IF;
+
+        UPDATE nutrition.cooked_dishes
+        SET remaining_weight = remaining_weight - v_weight_delta
+        WHERE id = NEW.cooked_dish_id;
+        
+        -- Пересчет макросов для новой порции (так же как в INSERT)
+         v_portion_coefficient := NEW.weight_grams / v_dish_final_weight;
+         NEW.calories := v_dish_calories * v_portion_coefficient;
+         NEW.proteins := v_dish_proteins * v_portion_coefficient;
+         NEW.fats     := v_dish_fats * v_portion_coefficient;
+         NEW.carbs    := v_dish_carbs * v_portion_coefficient;
+      END;
+  END IF;
 
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
 
 CREATE TRIGGER trg_calculate_consumed_nutrition
-BEFORE INSERT ON nutrition.consumed
+BEFORE INSERT OR UPDATE ON nutrition.consumed
 FOR EACH ROW EXECUTE FUNCTION nutrition.calculate_consumed_nutrition();
+
+-- g) restore_dish_weight_on_delete() + триггер
+-- Восстанавливает вес блюда при удалении записи о потреблении
+CREATE OR REPLACE FUNCTION nutrition.restore_dish_weight_on_delete()
+RETURNS TRIGGER AS $$
+BEGIN
+  UPDATE nutrition.cooked_dishes
+  SET remaining_weight = remaining_weight + OLD.weight_grams
+  WHERE id = OLD.cooked_dish_id;
+  RETURN OLD;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER trg_restore_dish_weight_on_delete
+AFTER DELETE ON nutrition.consumed
+FOR EACH ROW EXECUTE FUNCTION nutrition.restore_dish_weight_on_delete();
 
 
 -- e) update_recipe_stats() + триггер

@@ -15,7 +15,6 @@ def get_popular_recipes(limit: int = 10, conn: psycopg2.extensions.connection = 
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute("SELECT * FROM nutrition.popular_recipes LIMIT %s", (limit,))
         recipes = cursor.fetchall()
-    conn.close()
     return recipes
 
 
@@ -25,17 +24,42 @@ def get_recipes(search: Optional[str] = None, limit: int = 100, conn: psycopg2.e
     Retrieve a list of active recipes. Can be filtered by name.
     """
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
+        base_query = """
+            SELECT 
+                r.id, 
+                r.name, 
+                rc.name as category_name, 
+                r.description, 
+                r.instructions, 
+                r.times_cooked, 
+                r.avg_cooked_weight,
+                COALESCE(
+                    (
+                        SELECT json_agg(
+                            json_build_object(
+                                'ingredient_id', ri.ingredient_id, 
+                                'ingredient_name', i.name, 
+                                'weight_grams', ri.weight_grams
+                            )
+                        )
+                        FROM nutrition.recipe_ingredients ri
+                        JOIN nutrition.ingredients i ON ri.ingredient_id = i.id
+                        WHERE ri.recipe_id = r.id
+                    ), 
+                    '[]'::json
+                ) as ingredients
+            FROM nutrition.recipes_active r 
+            JOIN nutrition.recipe_categories rc ON r.category_id = rc.id 
+        """
+        
         if search:
-            query = "SELECT r.id, r.name, rc.name as category_name, r.description, r.instructions, r.times_cooked, r.avg_cooked_weight FROM nutrition.recipes_active r JOIN nutrition.recipe_categories rc ON r.category_id = rc.id WHERE r.name ILIKE %s LIMIT %s"
+            query = base_query + " WHERE r.name ILIKE %s LIMIT %s"
             cursor.execute(query, (f"%{search}%", limit))
         else:
-            cursor.execute("SELECT r.id, r.name, rc.name as category_name, r.description, r.instructions, r.times_cooked, r.avg_cooked_weight FROM nutrition.recipes_active r JOIN nutrition.recipe_categories rc ON r.category_id = rc.id LIMIT %s", (limit,))
+            query = base_query + " LIMIT %s"
+            cursor.execute(query, (limit,))
+            
         recipes = cursor.fetchall()
-
-        for recipe in recipes:
-            cursor.execute("SELECT ri.ingredient_id, i.name as ingredient_name, ri.weight_grams FROM nutrition.recipe_ingredients ri JOIN nutrition.ingredients i ON ri.ingredient_id = i.id WHERE ri.recipe_id = %s", (recipe["id"],))
-            recipe["ingredients"] = cursor.fetchall()
-    conn.close()
     return recipes
 
 @router.post("/", response_model=Recipe, status_code=status.HTTP_201_CREATED)
@@ -70,7 +94,6 @@ def create_recipe(recipe: RecipeCreate, conn: psycopg2.extensions.connection = D
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Database error: {e}")
 
-    conn.close()
     return get_recipe(new_recipe_id, get_db_connection())
 
 @router.get("/{recipe_id}", response_model=Recipe)
@@ -83,13 +106,11 @@ def get_recipe(recipe_id: int, conn: psycopg2.extensions.connection = Depends(ge
         recipe = cursor.fetchone()
 
         if not recipe:
-            conn.close()
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipe not found")
 
         cursor.execute("SELECT ri.ingredient_id, i.name as ingredient_name, ri.weight_grams FROM nutrition.recipe_ingredients ri JOIN nutrition.ingredients i ON ri.ingredient_id = i.id WHERE ri.recipe_id = %s", (recipe["id"],))
         recipe["ingredients"] = cursor.fetchall()
         
-    conn.close()
     return recipe
 
 @router.get("/{recipe_id}/nutrition", response_model=RecipeNutrition)
@@ -100,7 +121,6 @@ def get_recipe_nutrition(recipe_id: int, conn: psycopg2.extensions.connection = 
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute("SELECT * FROM nutrition.recipe_nutrition WHERE recipe_id = %s", (recipe_id,))
         nutrition = cursor.fetchone()
-    conn.close()
     if not nutrition:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipe not found")
     return nutrition
@@ -117,5 +137,4 @@ def delete_recipe(recipe_id: int, conn: psycopg2.extensions.connection = Depends
         except psycopg2.Error as e:
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    conn.close()
     return
