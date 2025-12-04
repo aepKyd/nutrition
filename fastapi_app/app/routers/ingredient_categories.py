@@ -15,7 +15,6 @@ def get_ingredient_categories(limit: int = 100, conn: psycopg2.extensions.connec
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute("SELECT id, name, description FROM nutrition.ingredient_categories ORDER BY name LIMIT %s", (limit,))
         categories = cursor.fetchall()
-    conn.close()
     return categories
 
 @router.post("/", response_model=IngredientCategory, status_code=status.HTTP_201_CREATED)
@@ -34,7 +33,6 @@ def create_ingredient_category(category: IngredientCategoryCreate, conn: psycopg
         except psycopg2.Error as e:
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Database error: {e}")
-    conn.close()
     return new_category
 
 @router.get("/{category_id}", response_model=IngredientCategory)
@@ -45,7 +43,6 @@ def get_ingredient_category(category_id: int, conn: psycopg2.extensions.connecti
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute("SELECT id, name, description FROM nutrition.ingredient_categories WHERE id = %s", (category_id,))
         category = cursor.fetchone()
-    conn.close()
     if not category:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ingredient category not found")
     return category
@@ -76,7 +73,6 @@ def update_ingredient_category(category_id: int, category: IngredientCategoryUpd
         except psycopg2.Error as e:
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Database error: {e}")
-    conn.close()
     return updated_category
 
 @router.delete("/{category_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -96,5 +92,4 @@ def delete_ingredient_category(category_id: int, conn: psycopg2.extensions.conne
             if e.pgcode == '23503':
                  raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete category that is in use by an ingredient.")
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Database error: {e}")
-    conn.close()
     return

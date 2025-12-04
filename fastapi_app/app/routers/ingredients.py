@@ -15,7 +15,6 @@ def search_ingredients(query: str, limit: int = 10, conn: psycopg2.extensions.co
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute("SELECT i.id, i.name, i.category_id, ic.name as category_name, i.calories, i.proteins, i.fats, i.carbs, s.search_score FROM nutrition.search_ingredients(%s, %s) s JOIN nutrition.ingredients i ON s.id = i.id JOIN nutrition.ingredient_categories ic ON i.category_id = ic.id", (query, limit))
         ingredients = cursor.fetchall()
-    conn.close()
     return ingredients
 
 @router.post("/", response_model=Ingredient, status_code=status.HTTP_201_CREATED)
@@ -42,7 +41,6 @@ def create_ingredient(ingredient: IngredientCreate, conn: psycopg2.extensions.co
         except psycopg2.Error as e:
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Database error: {e}")
-    conn.close()
     return new_ingredient
 
 @router.get("/{ingredient_id}", response_model=Ingredient)
@@ -53,7 +51,6 @@ def get_ingredient(ingredient_id: int, conn: psycopg2.extensions.connection = De
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute("SELECT i.id, i.name, i.category_id, ic.name as category_name, i.calories, i.proteins, i.fats, i.carbs FROM nutrition.ingredients_active i JOIN nutrition.ingredient_categories ic ON i.category_id = ic.id WHERE i.id = %s", (ingredient_id,))
         ingredient = cursor.fetchone()
-    conn.close()
     if not ingredient:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ingredient not found")
     return ingredient
@@ -68,12 +65,10 @@ def update_ingredient(ingredient_id: int, ingredient: IngredientUpdate, conn: ps
         cursor.execute("SELECT * FROM nutrition.ingredients WHERE id = %s", (ingredient_id,))
         current_ingredient = cursor.fetchone()
         if not current_ingredient:
-            conn.close()
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ingredient not found")
 
         update_data = ingredient.model_dump(exclude_unset=True)
         if not update_data:
-            conn.close()
             return get_ingredient(ingredient_id, get_db_connection())
 
         # Build the SET part of the SQL query dynamically
@@ -83,16 +78,12 @@ def update_ingredient(ingredient_id: int, ingredient: IngredientUpdate, conn: ps
 
         try:
             query = f"UPDATE nutrition.ingredients SET {set_query}, updated_at=NOW() WHERE id = %s"
-            with open("update_query.log", "w") as f:
-                f.write(f"Query: {query}\n")
-                f.write(f"Values: {values}\n")
             cursor.execute(query, values)
             conn.commit()
         except psycopg2.Error as e:
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Database error: {e}")
             
-    conn.close()
     return get_ingredient(ingredient_id, get_db_connection())
 
 
@@ -108,6 +99,5 @@ def delete_ingredient(ingredient_id: int, conn: psycopg2.extensions.connection =
         except psycopg2.Error as e:
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    conn.close()
     return
 

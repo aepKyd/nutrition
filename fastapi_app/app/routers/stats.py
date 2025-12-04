@@ -32,4 +32,3 @@ def get_daily_summary(
         raise HTTPException(status_code=500, detail=f"Database error: {e}")
     finally:
         cursor.close()
-        conn.close()

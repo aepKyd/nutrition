@@ -15,7 +15,6 @@ def get_remaining_dishes(limit: int = 100, conn: psycopg2.extensions.connection 
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute("SELECT * FROM nutrition.remaining_dishes ORDER BY cooked_at DESC LIMIT %s", (limit,))
         dishes = cursor.fetchall()
-    conn.close()
     return dishes
 
 
@@ -27,7 +26,6 @@ def get_cooked_dishes(limit: int = 100, conn: psycopg2.extensions.connection = D
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute("SELECT * FROM nutrition.cooked_dishes_active ORDER BY cooked_at DESC LIMIT %s", (limit,))
         dishes = cursor.fetchall()
-    conn.close()
     return dishes
 
 @router.post("/", response_model=CookedDish, status_code=status.HTTP_201_CREATED)
@@ -72,7 +70,6 @@ def create_cooked_dish(
         except psycopg2.Error as e:
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Database error: {e}")
-    conn.close()
     return new_dish
 
 @router.get("/{dish_id}", response_model=CookedDish)
@@ -83,7 +80,6 @@ def get_cooked_dish(dish_id: int, conn: psycopg2.extensions.connection = Depends
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute("SELECT * FROM nutrition.cooked_dishes_active WHERE id = %s", (dish_id,))
         dish = cursor.fetchone()
-    conn.close()
     if not dish:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cooked dish not found")
     return dish
@@ -100,5 +96,4 @@ def delete_cooked_dish(dish_id: int, conn: psycopg2.extensions.connection = Depe
         except psycopg2.Error as e:
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
-    conn.close()
     return

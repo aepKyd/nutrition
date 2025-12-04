@@ -15,7 +15,6 @@ def get_ingredient_synonyms(ingredient_id: int, conn: psycopg2.extensions.connec
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute("SELECT id, ingredient_id, synonym FROM nutrition.ingredient_synonyms WHERE ingredient_id = %s ORDER BY synonym", (ingredient_id,))
         synonyms = cursor.fetchall()
-    conn.close()
     return synonyms
 
 @router.post("/ingredients/{ingredient_id}/synonyms", response_model=IngredientSynonym, status_code=status.HTTP_201_CREATED, tags=["ingredient-synonyms"])
@@ -34,7 +33,6 @@ def create_ingredient_synonym(ingredient_id: int, synonym: IngredientSynonymCrea
         except psycopg2.Error as e:
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Database error: {e}")
-    conn.close()
     return new_synonym
 
 @router.delete("/ingredients/{ingredient_id}/synonyms/{synonym_id}", status_code=status.HTTP_204_NO_CONTENT, tags=["ingredient-synonyms"])
@@ -51,5 +49,4 @@ def delete_ingredient_synonym(ingredient_id: int, synonym_id: int, conn: psycopg
         except psycopg2.Error as e:
             conn.rollback()
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Database error: {e}")
-    conn.close()
     return
