@@ -33,17 +33,11 @@ def create_recipe(recipe: RecipeCreate, conn: psycopg2.extensions.connection = D
 
 @router.get("/{recipe_id}", response_model=Recipe)
 def get_recipe(recipe_id: int, conn: psycopg2.extensions.connection = Depends(get_db_connection)):
-    recipe = recipe_service.get_recipe_by_id(conn, recipe_id)
-    if not recipe:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipe not found")
-    return recipe
+    return recipe_service.get_recipe_by_id(conn, recipe_id)
 
 @router.get("/{recipe_id}/nutrition", response_model=RecipeNutrition)
 def get_recipe_nutrition(recipe_id: int, conn: psycopg2.extensions.connection = Depends(get_db_connection)):
-    nutrition = recipe_service.get_recipe_nutrition(conn, recipe_id)
-    if not nutrition:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Recipe not found")
-    return nutrition
+    return recipe_service.get_recipe_nutrition(conn, recipe_id)
 
 @router.delete("/{recipe_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_recipe(recipe_id: int, conn: psycopg2.extensions.connection = Depends(get_db_connection)):
