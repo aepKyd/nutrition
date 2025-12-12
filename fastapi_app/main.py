@@ -1,11 +1,20 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from app.routers import ingredients, recipes, dishes, consumed, stats, ingredient_categories, recipe_categories, ingredient_synonyms
+from app.exceptions import NutritionAPIException
 
 app = FastAPI(
     title="Nutrition API",
     description="A FastAPI application to interact with the Nutrition database.",
     version="1.0.0",
 )
+
+@app.exception_handler(NutritionAPIException)
+async def nutrition_exception_handler(request: Request, exc: NutritionAPIException):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"detail": exc.detail},
+    )
 
 app.include_router(ingredient_categories.router, prefix="/ingredient_categories", tags=["ingredient-categories"])
 app.include_router(recipe_categories.router, prefix="/recipe_categories", tags=["recipe-categories"])

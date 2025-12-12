@@ -3,6 +3,7 @@ from psycopg2.extras import RealDictCursor
 from typing import List, Dict, Any, Optional
 from app.schemas.schemas import RecipeCreate
 from app.services.ingredients import get_ingredient_by_id
+from app.exceptions import RecipeNotFoundException
 
 def get_popular_recipes(conn: psycopg2.extensions.connection, limit: int) -> List[Dict[str, Any]]:
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
@@ -76,16 +77,21 @@ def get_recipe_by_id(conn: psycopg2.extensions.connection, recipe_id: int) -> Di
         cursor.execute("SELECT r.id, r.name, rc.name as category_name, r.description, r.instructions, r.times_cooked, r.avg_cooked_weight FROM nutrition.recipes_active r JOIN nutrition.recipe_categories rc ON r.category_id = rc.id WHERE r.id = %s", (recipe_id,))
         recipe = cursor.fetchone()
 
-        if recipe:
-            cursor.execute("SELECT ri.ingredient_id, i.name as ingredient_name, ri.weight_grams FROM nutrition.recipe_ingredients ri JOIN nutrition.ingredients i ON ri.ingredient_id = i.id WHERE ri.recipe_id = %s", (recipe["id"],))
-            recipe["ingredients"] = cursor.fetchall()
+        if not recipe:
+            raise RecipeNotFoundException(f"Recipe with ID {recipe_id} not found.")
+
+        cursor.execute("SELECT ri.ingredient_id, i.name as ingredient_name, ri.weight_grams FROM nutrition.recipe_ingredients ri JOIN nutrition.ingredients i ON ri.ingredient_id = i.id WHERE ri.recipe_id = %s", (recipe["id"],))
+        recipe["ingredients"] = cursor.fetchall()
         
         return recipe
 
 def get_recipe_nutrition(conn: psycopg2.extensions.connection, recipe_id: int) -> Dict[str, Any]:
     with conn.cursor(cursor_factory=RealDictCursor) as cursor:
         cursor.execute("SELECT * FROM nutrition.recipe_nutrition WHERE recipe_id = %s", (recipe_id,))
-        return cursor.fetchone()
+        result = cursor.fetchone()
+        if not result:
+             raise RecipeNotFoundException(f"Nutrition data for recipe ID {recipe_id} not found.")
+        return result
 
 def delete_recipe(conn: psycopg2.extensions.connection, recipe_id: int):
     with conn.cursor() as cursor:
